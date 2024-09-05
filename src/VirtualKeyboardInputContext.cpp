@@ -3,6 +3,7 @@
 #include <private/qquickflickable_p.h>
 
 #include <QPropertyAnimation>
+#include <QtWidgets/qlineedit.h>
 
 #include "DeclarativeInputEngine.h"
 #include "EnterKeyAction.hpp"
@@ -17,7 +18,7 @@ class VirtualKeyboardInputContextPrivate {
     VirtualKeyboardInputContextPrivate();
 
     QQuickFlickable *Flickable;
-    QQuickItem *FocusItem;
+    QObject *FocusItem;
     bool Visible;
     DeclarativeInputEngine *InputEngine;
     QPropertyAnimation *FlickableContentScrollAnimation{nullptr};
@@ -96,25 +97,33 @@ void VirtualKeyboardInputContext::setFocusObject(QObject *object) {
     static const int NumericInputHints = Qt::ImhPreferNumbers | Qt::ImhDate |
                                          Qt::ImhTime |
                                          Qt::ImhFormattedNumbersOnly;
+    bool AcceptsInput = false;
+    int InputMethodHints = Qt::ImhNone;
 
     if (!object) {
         return;
     }
 
-    d->FocusItem = dynamic_cast<QQuickItem *>(object);
-    if (!d->FocusItem) {
+    if(object->inherits("QQuickItem")) {
+        AcceptsInput = ((QQuickItem *)object)->inputMethodQuery(Qt::ImEnabled).toBool();
+        InputMethodHints = ((QQuickItem *)object)->inputMethodQuery(Qt::ImHints).toInt();
+    }
+    else if(object->inherits("QLineEdit")) {
+        AcceptsInput = ((QLineEdit *)object)->inputMethodQuery(Qt::ImEnabled).toBool();
+        InputMethodHints = ((QLineEdit *)object)->inputMethodQuery(Qt::ImHints).toInt();
+    }
+    else {
         return;
     }
 
-    bool AcceptsInput = d->FocusItem->inputMethodQuery(Qt::ImEnabled).toBool();
+    d->FocusItem = object;
+
     if (!AcceptsInput) {
         return;
     }
 
     emit inputItemChanged();
 
-    Qt::InputMethodHints InputMethodHints(
-        d->FocusItem->inputMethodQuery(Qt::ImHints).toInt());
     if (InputMethodHints & Qt::ImhDigitsOnly) {
         d->InputEngine->setInputMode(DeclarativeInputEngine::DigitsOnly);
         d->InputEngine->setSymbolMode(false);
@@ -129,17 +138,19 @@ void VirtualKeyboardInputContext::setFocusObject(QObject *object) {
         d->InputEngine->setUppercase(false);
     }
 
-    QQuickItem *i = d->FocusItem;
     d->Flickable = 0;
-    while (i) {
-        QQuickFlickable *Flickable = dynamic_cast<QQuickFlickable *>(i);
-        if (Flickable) {
-            d->Flickable = Flickable;
+    if(object->inherits("QQuickItem")) {
+        // Search for flickable parent (only available in QQuickItem)
+        QQuickItem *i = dynamic_cast<QQuickItem *>(d->FocusItem);
+        while (i) {
+            QQuickFlickable *Flickable = dynamic_cast<QQuickFlickable *>(i);
+            if (Flickable) {
+                d->Flickable = Flickable;
+            }
+            i = i->parentItem();
         }
-        i = i->parentItem();
+        ensureFocusedObjectVisible();
     }
-
-    ensureFocusedObjectVisible();
 }
 
 void VirtualKeyboardInputContext::ensureFocusedObjectVisible() {
@@ -147,18 +158,21 @@ void VirtualKeyboardInputContext::ensureFocusedObjectVisible() {
         return;
     }
 
-    QRectF FocusItemRect(0, 0, d->FocusItem->width(), d->FocusItem->height());
-    FocusItemRect = d->Flickable->mapRectFromItem(d->FocusItem, FocusItemRect);
-    d->FlickableContentScrollAnimation->setTargetObject(d->Flickable);
-    if (FocusItemRect.bottom() >= d->Flickable->height()) {
-        auto ContentY = d->Flickable->contentY() +
-                        (FocusItemRect.bottom() - d->Flickable->height()) + 20;
-        d->FlickableContentScrollAnimation->setEndValue(ContentY);
-        d->FlickableContentScrollAnimation->start();
-    } else if (FocusItemRect.top() < 0) {
-        auto ContentY = d->Flickable->contentY() + FocusItemRect.top() - 20;
-        d->FlickableContentScrollAnimation->setEndValue(ContentY);
-        d->FlickableContentScrollAnimation->start();
+    QQuickItem * focusItem = dynamic_cast<QQuickItem *>(d->FocusItem);
+    if(focusItem) {
+        QRectF FocusItemRect(0, 0, focusItem->width(), focusItem->height());
+        FocusItemRect = d->Flickable->mapRectFromItem(focusItem, FocusItemRect);
+        d->FlickableContentScrollAnimation->setTargetObject(d->Flickable);
+        if (FocusItemRect.bottom() >= d->Flickable->height()) {
+            auto ContentY = d->Flickable->contentY() +
+                            (FocusItemRect.bottom() - d->Flickable->height()) + 20;
+            d->FlickableContentScrollAnimation->setEndValue(ContentY);
+            d->FlickableContentScrollAnimation->start();
+        } else if (FocusItemRect.top() < 0) {
+            auto ContentY = d->Flickable->contentY() + FocusItemRect.top() - 20;
+            d->FlickableContentScrollAnimation->setEndValue(ContentY);
+            d->FlickableContentScrollAnimation->start();
+        }
     }
 }
 
