@@ -1,0 +1,2 @@
+add_subdirectory(example_quick)
+add_subdirectory(example_widgets)
