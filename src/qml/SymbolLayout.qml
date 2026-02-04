@@ -425,14 +425,14 @@ Item {
             }
 
             Key {
-                btnKey: 8482
-                btnText: '™'
+                btnKey: Qt.Key_twosuperior
+                btnText: '²'
                 inputPanelRef: inputPanel
             }
 
             Key {
-                btnKey: 174
-                btnText: '®'
+                btnKey: Qt.Key_threesuperior
+                btnText: '³'
                 inputPanelRef: inputPanel
             }
 
